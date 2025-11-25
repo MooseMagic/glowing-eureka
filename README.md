@@ -212,5 +212,7 @@ struct PaywallView: View {
                 .foregroundColor(.secondary)
         }
         .
-- **Workflow permissions** → **Read and write** → **Save**.  
+} Workflow permissions 
+Read and write
+Save.
   
