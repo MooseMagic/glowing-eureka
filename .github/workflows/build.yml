@@ -38,6 +38,3 @@ jobs:
         with:
           name: Metric-ipa
           path: build/*.ipa
-- uses: maxim-lobanov/setup-xcode@v1
-  with:
-    xcode-version: '15.0'
