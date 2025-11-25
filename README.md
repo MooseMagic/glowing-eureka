@@ -217,4 +217,13 @@ struct PaywallView: View {
 } Workflow permissions 
 Read and write
 Save.
+{
+  "name": "glowing-eureka",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'No build step needed'"
+  }
+}
+
   
