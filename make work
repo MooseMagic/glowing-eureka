@@ -1,0 +1,185 @@
+var body: some View {
+    NavigationStack {
+        VStack(spacing: 32) {
+            Text("Metric").font(.largeTitle.bold())
+            
+            Button(action: engine.toggleRecord) {
+                Image(systemName: engine.isRecording ? "stop.circle" : "record.circle")
+                    .font(.system(size: 72))
+                    .foregroundColor(engine.isRecording ? .red : .accentColor)
+            }
+            
+            Text(engine.statusText)
+                .font(.callout)
+                .foregroundColor(.secondary)
+            
+            if let url = engine.lastExport {
+                ShareLink(item: url) {
+                    Label("Share / Download", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            
+            ProBanner()
+        }
+        .padding()
+        .navigationDestination(isPresented: $store.showPaywall) {
+            PaywallView()
+        }
+    }
+}
+private let engine      = AVAudioEngine()
+private let mixer       = AVAudioMixerNode()
+private let counter     = ExportCounter()
+private var writer: AVAudioFile?
+
+init() {
+    setupSession()
+    configureEngine()
+}
+
+private func setupSession() {
+    let session = AVAudioSession.sharedInstance()
+    do {
+        try session.setCategory(.playAndRecord,
+                                mode: .default,
+                                options: [.defaultToSpeaker, .allowBluetooth])
+        try session.setActive(true, options: [])
+    } catch { fatalError("AudioSession \(error)") }
+}
+
+private func configureEngine() {
+    let input = engine.inputNode
+    engine.attach(mixer)
+    engine.connect(input, to: mixer, format: input.outputFormat(forBus: 0))
+}
+
+func toggleRecord() {
+    isRecording ? stop() : start()
+}
+
+private func start() {
+    guard counter.canDownload() else {
+        statusText = "Upgrade to Pro for unlimited exports"
+        return
+    }
+    
+    // Headphone-aware noise cancellation
+    if !isHeadsetConnected() {
+        enableVoiceIsolation()
+    }
+    
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("metric_\(UUID().uuidString).m4a")
+    
+    let settings = [
+        AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+        AVSampleRateKey: 44100,
+        AVEncoderBitRateKey: 192_000
+    ] as [String: Any]
+    
+    do {
+        writer = try AVAudioFile(forWriting: url, settings: settings)
+        mixer.installTap(onBus: 0, bufferSize: 8192, format: mixer.outputFormat(forBus: 0)) { [weak self] buffer, _ in
+            guard let w = self?.writer else { return }
+            do { try w.write(from: buffer) } catch { /* silent */ }
+        }
+        try engine.start()
+        isRecording = true
+        statusText = "Recording…"
+        lastExport = nil
+    } catch {
+        statusText = "Start failed"
+    }
+}
+
+private func stop() {
+    mixer.removeTap(onBus: 0)
+    engine.stop()
+    isRecording = false
+    statusText = "Saved"
+    lastExport = writer?.url
+    counter.increment()
+    writer = nil
+}
+
+private func isHeadsetConnected() -> Bool {
+    let route = AVAudioSession.sharedInstance().currentRoute
+    return route.outputs.contains { $0.portType == .headsetMic || $0.portType == .bluetoothHFP }
+}
+
+private func enableVoiceIsolation() {
+    do {
+        try AVAudioSession.sharedInstance().setMode(.voiceChat)
+    } catch { /* fallback */ }
+}
+func canDownload() -> Bool { ud.integer(forKey: key) < 10 }
+func increment()        { ud.set(ud.integer(forKey: key) + 1, forKey: key) }
+private let productID = "io.metric.daw.pro.yearly"
+private var product: Product?
+
+init() {
+    Task { await observeTransactions() }
+}
+
+func observeTransactions() async {
+    for await update in Transaction.updates {
+        if let tx = checkVerified(update) {
+            isPro = true
+            await tx.finish()
+        }
+    }
+}
+
+func purchase() async {
+    do {
+        let storeProducts = try await Product.products(for: [productID])
+        guard let pro = storeProducts.first else { return }
+        let result = try await pro.purchase(options: [.appleMarketingOptIn(false)])
+        if case .success(let verification) = result,
+           let tx = checkVerified(verification) {
+            isPro = true
+            await tx.finish()
+        }
+    } catch {
+        // Handle error silently for MVP
+    }
+}
+
+private func checkVerified<T>(_ result: VerificationResult<T>) -> T? {
+    switch result {
+    case .verified(let safe): return safe
+    case .unverified: return nil
+    }
+}
+  - name: Select Xcode 15
+    run: sudo xcode-select -s /Applications/Xcode_15.0.app
+
+  - name: Build archive
+    run: |
+      xcodebuild -project Metric.xcodeproj \
+                 -scheme Metric \
+                 -configuration Release \
+                 -destination 'generic/platform=iOS' \
+                 archive -archivePath build/Metric.xcarchive
+
+  - name: Export IPA
+    run: |
+      # auto-sign with free personal team for now
+      xcodebuild -exportArchive \
+                 -archivePath build/Metric.xcarchive \
+                 -exportPath build \
+                 -exportOptionsPlist ExportOptions.plist
+
+  - name: Upload IPA artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: Metric-ipa
+      path: build/*.ipa
+cd ~/Desktop/Metric
+git init
+git add .
+git commit -m "Metric MVP – noise-cancelling recorder + StoreKit 2"
+git branch -M main
+git remote add origin https://github.com/YOURNAME/metric-ios.git
+git push -u origin main
