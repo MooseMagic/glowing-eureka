@@ -211,6 +211,6 @@ struct PaywallView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
-        .padding()
-    }
-}
+        .
+- **Workflow permissions** → **Read and write** → **Save**.  
+  
