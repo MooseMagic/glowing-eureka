@@ -225,5 +225,32 @@ Save.
     "build": "echo 'No build step needed'"
   }
 }
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build static site
+        run: |
+          mkdir -p public
+          cp README.md public/index.md
+          echo '<h1>Metric – pocket DAW</h1><p>Coming to iOS soon.</p>' > public/index.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
   
