@@ -1,4 +1,6 @@
-//
+//      - name: Install dependencies
+        run: npm install
+
 //  ContentView.swift
 //  Metric
 //
